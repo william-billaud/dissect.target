@@ -12,6 +12,7 @@ from dissect.target.helpers.record import (
     TargetRecordDescriptor,
 )
 from dissect.target.plugin import Plugin, export
+from dissect.target.plugins.os.unix.cronjobs import EnvironmentVariableRecord
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -23,20 +24,11 @@ AnacronjobRecord = TargetRecordDescriptor(
     "unix/anacronjob",
     [
         ("string", "period_name"),
-        ("varint", "delay"),
+        ("varint", "delay_in_minutes"),
         ("string", "job_identify"),
         ("string", "command"),
         ("datetime", "ts_first_exec"),  # /var/spool/anacron/job_identify birth time
         ("datetime", "ts_last_exec"),  # based on /var/spool/anacron/job_identify content and last modification time
-        ("path", "source"),
-    ],
-)
-
-EnvironmentVariableRecord = TargetRecordDescriptor(
-    "unix/environmentvariable",
-    [
-        ("string", "key"),
-        ("string", "value"),
         ("path", "source"),
     ],
 )
@@ -55,11 +47,19 @@ RE_ANACRONJOB = re.compile(
     """,
     re.VERBOSE,
 )
-RE_ENVVAR = re.compile(r"^(?P<key>[a-zA-Z_]+[a-zA-Z[0-9_])\s?=\s?(?P<value>.*)")
+
+# Spaces around VAR are removed.  No spaces around	VALUE are allowed (unless  you want them to be part of the value).
+
+RE_ENVVAR = re.compile(r"^\s*(?P<key>[a-zA-Z_]+[a-zA-Z[0-9_])\s*=(?P<value>.*)")
 
 
 class AnacronjobPlugin(Plugin):
     """Unix anacron plugin."""
+
+    ANACRONTAB_FILES = (
+        "/etc/anacrontab",  # Linux
+        "/usr/local/etc/anacrontab"  # FreeBSD
+    )
 
     def __init__(self, target: Target):
         super().__init__(target)
@@ -67,28 +67,27 @@ class AnacronjobPlugin(Plugin):
 
     def check_compatible(self) -> None:
         if not self.ancrontabs:
-            raise UnsupportedPluginError("No crontab(s) found on target")
+            raise UnsupportedPluginError("No anacrontab found on target")
 
     def _get_paths(self) -> Iterator[Path]:
-        if (file := self.target.fs.path("/etc/anacrontab")).exists():
-            yield file
+        for anacrontab_file in self.ANACRONTAB_FILES:
+            if (file := self.target.fs.path(anacrontab_file)).exists():
+                yield file
 
     @export(record=[AnacronjobRecord, EnvironmentVariableRecord])
     def anacronjobs(self) -> Iterator[AnacronjobRecord | EnvironmentVariableRecord]:
         """Yield anacron jobs, and their configured environment variables on a Unix system
 
-        A anacron job is a scheduled task/command on a Unix based system. Adversaries may use anacronjobs to gain
-        persistence on the system. "Unlike cron, it does not assume that the machine is running continuously.
-        Hence, it can be used on machines that aren't running 24 hours a day, to control regular jobs as daily,
-        weekly, and monthly jobs."
+        An anacron job is a scheduled task/command on a Unix based system. Adversaries may use anacronjobs to gain
+        persistence on the system. This plugins also iterate over files executed using run-parts
 
         References:
             - https://linux.die.net/man/5/anacrontab
+            - https://man.freebsd.org/cgi/man.cgi?anacron(8)
             - https://linux.die.net/man/8/anacron
         """
 
         for file in self.ancrontabs:
-            # Cronjobs in user crontab files do not have a user field specified.
 
             for line in file.open("rt"):
                 line = line.strip()
@@ -111,14 +110,14 @@ class AnacronjobPlugin(Plugin):
                         ts_last_exec = ts.from_unix(ts_file_stat.st_mtime)
                         anacron_ts_value = ts_file.read_text(errors="backslashreplace").strip()
                         if ts_first_exec and ts_first_exec.strftime("%Y%m%d") > anacron_ts_value:
-                            # incoherent value, maybe related to ts modification/data loss during transfer
+                            # incoherent value, maybe related to ts modification/data loss during collection
                             ts_first_exec = None
                         if ts_last_exec.strftime("%Y%m%d") != anacron_ts_value:
-                            # incoherent value, maybe related to ts modification/data loss during transfer
+                            # incoherent value, maybe related to ts modification/data loss during collection
                             ts_last_exec = datetime.datetime.strptime(anacron_ts_value, "%Y%m%d")  # noqa: DTZ007
                     yield AnacronjobRecord(
                         period_name=match.get("period_name", None),
-                        delay=match.get("delay", None),
+                        delay_in_minutes=match.get("delay", None),
                         job_identify=job_identify,
                         command=command,
                         ts_first_exec=ts_first_exec,
@@ -129,6 +128,7 @@ class AnacronjobPlugin(Plugin):
                     if command:
                         splited = shlex.split(command)
                         # Anacron often use run-parts or nice run-parts to run a list of script in a directory
+                        # Last part of the command is the name of the folder
                         if (
                             "run-parts" in splited[:2]
                             and (run_part_dir := self.target.fs.path(splited[-1])).exists()
@@ -137,7 +137,7 @@ class AnacronjobPlugin(Plugin):
                             for f in run_part_dir.iterdir():
                                 yield AnacronjobRecord(
                                     period_name=match.get("period_name", None),
-                                    delay=match.get("delay", None),
+                                    delay_in_minutes=match.get("delay", None),
                                     job_identify=job_identify,
                                     command=f,
                                     ts_first_exec=ts_first_exec,
@@ -146,7 +146,7 @@ class AnacronjobPlugin(Plugin):
                                     _target=self.target,
                                 )
 
-                # Some cron implementations allow for environment variables to be set inside crontab files.
+                # Anacron allows for Environment assignment
                 elif match := RE_ENVVAR.search(line):
                     match = match.groupdict()
                     yield EnvironmentVariableRecord(
