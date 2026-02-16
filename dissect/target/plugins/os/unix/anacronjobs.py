@@ -58,7 +58,7 @@ class AnacronjobPlugin(Plugin):
 
     ANACRONTAB_FILES = (
         "/etc/anacrontab",  # Linux
-        "/usr/local/etc/anacrontab"  # FreeBSD
+        "/usr/local/etc/anacrontab",  # FreeBSD
     )
 
     def __init__(self, target: Target):
@@ -88,7 +88,6 @@ class AnacronjobPlugin(Plugin):
         """
 
         for file in self.ancrontabs:
-
             for line in file.open("rt"):
                 line = line.strip()
                 ts_first_exec = None
