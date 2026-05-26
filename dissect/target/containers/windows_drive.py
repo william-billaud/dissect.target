@@ -41,13 +41,13 @@ class WindowsDrive(Container):
         if hasattr(fh, "read"):
             raise TypeError("Windows Drive can only be opened by path")
         if sys.platform != "win32":
-            raise TypeError("Windows Drive is only available on Windows plateform.")
+            raise TypeError("Windows Drive is only available on Windows platform.")
         disk_size = _windows_get_disk_size(str(fh))
-        self._raw_stream = fh.open("rb") # noqa: SIM115
+        self._raw_stream = fh.open("rb")
         self.stream = BufferedStream(
-                self._raw_stream,
-                size=disk_size,
-            )
+            self._raw_stream,
+            size=disk_size,
+        )
         super().__init__(fh, disk_size, *args, **kwargs)
 
     @staticmethod
@@ -61,7 +61,7 @@ class WindowsDrive(Container):
         # return path.drive == "\\\\.\\"
         return is_physical_drive_path(str(path)) or is_logical_drive_path(str(path))
 
-    def read(self, length: int) -> bytes:
+    def read(self, length: int = -1) -> bytes:
         return self.stream.read(length)
 
     def seek(self, offset: int, whence: int = io.SEEK_SET) -> int:
