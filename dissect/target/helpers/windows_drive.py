@@ -3,13 +3,12 @@ from __future__ import annotations
 import ctypes
 from typing import TypeVar
 
-
 T = TypeVar("T", bound=ctypes.Structure)
 
 
 def _windows_get_disk_size(path: str) -> int:
-    """
-    Get disk size from a PhysicalDrive path. Must be used only on a Windows platform.
+    """Get disk size from a PhysicalDrive path. Must be used only on a Windows platform.
+
     Args:
         path: physical drive path, e.g \\\\.\\PhysicalDrive0
     """
@@ -113,7 +112,6 @@ def _windows_closehandle(handle: int) -> None:
         handle: file handle create dusing _windows_createfile.
     """
     ctypes.windll.kernel32.CloseHandle(handle)
-
 
 
 def _windows_ioctl(handle: int, ioctl: int, out_struct: type[T]) -> tuple[int, T]:

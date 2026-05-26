@@ -19,7 +19,6 @@ class RawContainer(Container):
     __type__ = "raw"
 
     def __init__(self, fh: BinaryIO | Path, *args, **kwargs):
-        log
         if not hasattr(fh, "read"):
             fh = fh.open("rb")
 

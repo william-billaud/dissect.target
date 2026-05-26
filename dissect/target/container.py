@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -260,6 +259,4 @@ register("hdd", "HddContainer")
 register("hds", "HdsContainer")
 register("split", "SplitContainer")
 register("fortifw", "FortiFirmwareContainer")
-
-if sys.platform == "win32":
-    register("windows_drive", "WindowsDrive")
+register("windows_drive", "WindowsDrive")
