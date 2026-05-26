@@ -16,11 +16,15 @@ if TYPE_CHECKING:
 class VBLoader(Loader):
     @staticmethod
     def detect(path: Path) -> bool:
-        mft_exists = path.joinpath("MFT_C.bin").exists()
-        c_drive_exists = path.joinpath("C_drive").exists()
-        config_exists = path.joinpath("Windows/System32/config").exists()
+        try:
+            mft_exists = path.joinpath("MFT_C.bin").exists()
+            c_drive_exists = path.joinpath("C_drive").exists()
+            config_exists = path.joinpath("Windows/System32/config").exists()
 
-        return (mft_exists or c_drive_exists) and config_exists
+            return (mft_exists or c_drive_exists) and config_exists
+        except OSError:
+            # May raise error such as Permission Error
+            return False
 
     def map(self, target: Target) -> None:
         remap_overlay = target.fs.append_layer()
