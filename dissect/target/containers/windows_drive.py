@@ -43,7 +43,7 @@ class WindowsDrive(Container):
         if sys.platform != "win32":
             raise TypeError("Windows Drive is only available on Windows plateform.")
         disk_size = _windows_get_disk_size(str(fh))
-        self._raw_stream = open(str(fh), "rb") # noqa: SIM115
+        self._raw_stream = fh.open("rb") # noqa: SIM115
         self.stream = BufferedStream(
                 self._raw_stream,
                 size=disk_size,
