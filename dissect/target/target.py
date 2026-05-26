@@ -349,7 +349,7 @@ class Target:
             adjusted_path, parsed_path = parse_path_uri(spec)
             # We always need a path to work with, so convert the spec into one if it's not one already
             path = Path(spec) if not isinstance(spec, os.PathLike) else spec
-
+            log.trace("Testing path : adjusted path :%s, parse_path_uri :%s ", adjusted_path, parsed_path)
             if parsed_path is not None and (loader_cls := loader.find_loader_by_scheme(parsed_path.scheme)):
                 # If we find a loader by URI scheme, use the adjusted path (path component of the URI)
                 found_path = adjusted_path
