@@ -24,7 +24,7 @@ def is_physical_drive_path(path: str) -> bool:
 
 def is_logical_drive_path(path: str) -> bool:
     r"""Check if path match a logical drive path, E.g : \\.\C: or \\.\\\Z: ."""
-    return re.fullmatch(r"\\\\.\\+[a-z]:\\*", path, re.IGNORECASE) is not None
+    return re.fullmatch(r"\\\\.\\+[a-z]:", path, re.IGNORECASE) is not None
 
 
 class WindowsDrive(RawContainer):
