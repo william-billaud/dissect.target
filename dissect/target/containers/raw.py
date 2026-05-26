@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING, BinaryIO
 from dissect.util.stream import AlignedStream, BufferedStream
 
 from dissect.target.container import Container
+from dissect.target.helpers.logging import get_logger
+
+log = get_logger(__name__)
+
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -15,6 +19,7 @@ class RawContainer(Container):
     __type__ = "raw"
 
     def __init__(self, fh: BinaryIO | Path, *args, **kwargs):
+        log
         if not hasattr(fh, "read"):
             fh = fh.open("rb")
 

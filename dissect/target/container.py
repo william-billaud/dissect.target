@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import sys
 from pathlib import Path
+from platform import platform, system
 from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.target.exceptions import ContainerError
@@ -258,3 +260,6 @@ register("hdd", "HddContainer")
 register("hds", "HdsContainer")
 register("split", "SplitContainer")
 register("fortifw", "FortiFirmwareContainer")
+
+if sys.platform == "win32":
+    register("win_drive", "WindowsDrive")
