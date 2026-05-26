@@ -353,6 +353,7 @@ class Target:
             if parsed_path is not None and (loader_cls := loader.find_loader_by_scheme(parsed_path.scheme)):
                 # If we find a loader by URI scheme, use the adjusted path (path component of the URI)
                 found_path = adjusted_path
+                log.trace("Loader from URI : %s, adjusted path : ", loader_cls, adjusted_path)
             elif loader_cls := loader.find_loader(path, fallbacks=[loader.DirLoader, loader.RawLoader]):
                 # Otherwise try to find a loader for the "raw" path
                 # If we succeed, upgrade the "spec" to the path
