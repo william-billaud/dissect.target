@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import io
 import re
 import sys
 from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.util.stream import BufferedStream
 
-from dissect.target.containers.raw import RawContainer
+from dissect.target.container import Container
 from dissect.target.helpers.logging import get_logger
 from dissect.target.helpers.windows_drive import _windows_get_disk_size
 
@@ -23,12 +24,16 @@ def is_physical_drive_path(path: str) -> bool:
 
 
 def is_logical_drive_path(path: str) -> bool:
-    r"""Check if path match a logical drive path, E.g : \\.\C: or \\.\\\Z: ."""
+    r"""Check if path match a logical drive path, E.g : `\\.\C:` or `\\.\\\Z:` ."""
     return re.fullmatch(r"\\\\.\\+[a-z]:", path, re.IGNORECASE) is not None
 
 
-class WindowsDrive(RawContainer):
-    r"""Allows to load windows drive, such as \\.\C: or "\\.\PhysicalDrive1 ."""
+class WindowsDrive(Container):
+    r"""Allows to load windows drive, such as `\\.\C:` or `\\.\PhysicalDrive1` directly from Windows.
+
+    This Container is needed as Windows Drive does not support seek end, and must be wrapped inside a bufferedStream.
+    Specific windows api call must be used to retrieves drive length.
+    """
 
     __type__ = "windows_drive"
 
@@ -38,14 +43,12 @@ class WindowsDrive(RawContainer):
         if sys.platform != "win32":
             raise TypeError("Windows Drive is only available on Windows plateform.")
         disk_size = _windows_get_disk_size(str(fh))
-        super().__init__(
-            BufferedStream(
-                open(str(fh), "rb"),  # noqa: PTH123, SIM115
+        self._raw_stream = open(str(fh), "rb") # noqa: SIM115
+        self.stream = BufferedStream(
+                self._raw_stream,
                 size=disk_size,
-            ),
-            *args,
-            **kwargs,
-        )
+            )
+        super().__init__(fh, disk_size, *args, **kwargs)
 
     @staticmethod
     def _detect_fh(fh: BinaryIO, original: list | BinaryIO) -> bool:
@@ -57,3 +60,16 @@ class WindowsDrive(RawContainer):
             return False
         # return path.drive == "\\\\.\\"
         return is_physical_drive_path(str(path)) or is_logical_drive_path(str(path))
+
+    def read(self, length: int) -> bytes:
+        return self.stream.read(length)
+
+    def seek(self, offset: int, whence: int = io.SEEK_SET) -> int:
+        return self.stream.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self.stream.tell()
+
+    def close(self) -> None:
+        self.stream.close()
+        self._raw_stream.close()
