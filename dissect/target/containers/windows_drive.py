@@ -34,5 +34,5 @@ class WindowsDrive(RawContainer):
 
     @staticmethod
     def detect_path(path: Path, original: list | BinaryIO) -> bool:
-        print(f"Path to detect : {Path}")
+        print(f"Path to detect : {path}")
         return True
