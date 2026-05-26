@@ -199,6 +199,7 @@ def find_loader(
     for loader in LOADERS + fallbacks:
         try:
             if loader.detect(path):
+                log.trace("Testing loader %s with path %s", loader, path)
                 return loader
         except ImportError as e:  # noqa: PERF203
             log.info("Failed to import %s", loader)
