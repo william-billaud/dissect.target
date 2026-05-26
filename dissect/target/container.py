@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import sys
 from pathlib import Path
-from platform import platform, system
 from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.target.exceptions import ContainerError
@@ -263,4 +262,4 @@ register("split", "SplitContainer")
 register("fortifw", "FortiFirmwareContainer")
 
 if sys.platform == "win32":
-    register("win_drive", "WindowsDrive")
+    register("windows_drive", "WindowsDrive")

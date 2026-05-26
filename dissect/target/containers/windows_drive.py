@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import io
 from typing import TYPE_CHECKING, BinaryIO
 
-from dissect.util.stream import AlignedStream, BufferedStream
+from dissect.util.stream import BufferedStream
 
-from dissect.target.container import Container, RawContainer
+from dissect.target.containers.raw import RawContainer
 from dissect.target.helpers.logging import get_logger
 from dissect.target.helpers.windows_drive import _windows_get_disk_size
 
