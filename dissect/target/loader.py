@@ -196,6 +196,7 @@ def find_loader(
     if fallbacks is None:
         fallbacks = [DirLoader]
 
+    log.trace("%s exists : %s : ", path, path.exists())
     for loader in LOADERS + fallbacks:
         try:
             log.trace('Testing %s for path %s ', loader, path)
@@ -204,7 +205,9 @@ def find_loader(
         except ImportError as e:  # noqa: PERF203
             log.info("Failed to import %s", loader)
             log.debug("", exc_info=e)
-
+        except PermissionError as e:  # noqa: PERF203
+            log.info("Permission error related to loader %s. Possible issue related to file access.", loader)
+            log.debug("", exc_info=e)
     return None
 
 
