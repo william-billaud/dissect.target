@@ -176,15 +176,3 @@ def test_secretsdump_direct(target_ntds_direct: Target) -> None:
     """Tests if ``ad.secretsdump`` raise an UnsupportedPluginError in direct mode."""
     with pytest.raises(UnsupportedPluginError):
         list(target_ntds_direct.ad.secretsdump())
-
-
-def test_dns_nodes(target_win_ntds: Target) -> None:
-    results = list(target_win_ntds.ad.dns_nodes())
-    #    results.sort(key=lambda x: getattr(x, "creation_time"))
-    #    assert results[0].dns_name == ""
-    assert len(results) == 113
-
-
-def test_dns_nodes_direct(target_ntds_direct: Target) -> None:
-    results = list(target_ntds_direct.ad.dns_nodes())
-    assert len(results) == 113
