@@ -15,11 +15,11 @@ from dissect.target.plugins.os.windows.sam import des_decrypt
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
     from dissect.database.ese.ntds.objects import Computer, User
 
     from dissect.target.target import Target
-
 
 GENERIC_FIELDS = [
     ("string", "cn"),
@@ -105,6 +105,14 @@ class NtdsPlugin(Plugin):
 
     def __init__(self, target: Target):
         super().__init__(target)
+        ntds_dit_path = list(self.get_paths())
+        if len(ntds_dit_path) > 1:
+            raise UnsupportedPluginError("NTDS plugins does not support multiple paths.")
+        if len(ntds_dit_path) == 0:
+            raise UnsupportedPluginError("No NTDS database found")
+        self.path = ntds_dit_path[0]
+
+    def _get_paths(self) -> Iterator[Path]:
         path = "sysvol/windows/NTDS/ntds.dit"
         if self.target.has_function("registry"):
             try:
@@ -113,11 +121,11 @@ class NtdsPlugin(Plugin):
             except RegistryKeyNotFoundError:
                 pass
 
-        self.path = self.target.fs.path(path)
+        yield self.target.fs.path(path)
 
     def check_compatible(self) -> None:
         if not self.target.has_function("lsa"):
-            raise UnsupportedPluginError("System Hive is not present or LSA function not available")
+            raise self.target.log.warning("NTDS plugin : System Hive is not present or LSA function not available")
 
         if not self.path.is_file():
             raise UnsupportedPluginError("No NTDS.dit database found on target")
@@ -127,7 +135,7 @@ class NtdsPlugin(Plugin):
     def ntds(self) -> NTDS:
         ntds = NTDS(self.path.open("rb"))
 
-        if self.target.has_function("lsa"):
+        if not self.target.is_direct and self.target.has_function("lsa"):
             ntds.pek.unlock(self.target.lsa.syskey)
 
         return ntds
@@ -137,7 +145,7 @@ class NtdsPlugin(Plugin):
         """Extract all user accounts from the NTDS.dit database."""
         for user in self.ntds.users():
             yield NtdsUserRecord(
-                **extract_user_info(user, self.target),
+                **extract_user_info(user, self.target, self.ntds.pek.unlocked),
                 info=user.get("info"),
                 comment=user.get("comment"),
                 telephone_number=user.get("telephoneNumber"),
@@ -150,7 +158,7 @@ class NtdsPlugin(Plugin):
         """Extract all computer accounts from the NTDS.dit database."""
         for computer in self.ntds.computers():
             yield NtdsComputerRecord(
-                **extract_user_info(computer, self.target),
+                **extract_user_info(computer, self.target, self.ntds.pek.unlocked),
                 dns_hostname=computer.get("dNSHostName"),
                 operating_system=computer.get("operatingSystem"),
                 operating_system_version=computer.get("operatingSystemVersion"),
@@ -175,6 +183,8 @@ class NtdsPlugin(Plugin):
     @export(output="yield")
     def secretsdump(self) -> Iterator[str]:
         """Extract credentials in secretsdump format. Because it's a popular format."""
+        if not self.ntds.pek.unlocked:
+            raise UnsupportedPluginError("PEK is locked. secretsdump requires access to SYSTEM hive to retrieve syskey")
         # Keep impacket defined constants in the method so we don't polute our own
         kerberos_key_type = {
             1: "dec-cbc-crc",
@@ -224,15 +234,22 @@ class NtdsPlugin(Plugin):
                     yield f"{username}:CLEARTEXT:{supplemental['Primary:CLEARTEXT']}"
 
 
-def extract_user_info(user: User | Computer, target: Target) -> dict[str, Any]:
+def extract_user_info(user: User | Computer, target: Target, unlocked: bool = False) -> dict[str, Any]:
     """Extract generic information from a User or Computer account."""
-    lm_hash = des_decrypt(lm_pwd, user.rid).hex() if (lm_pwd := user.get("dBCSPwd")) else DEFAULT_LM_HASH
-    nt_hash = des_decrypt(nt_pwd, user.rid).hex() if (nt_pwd := user.get("unicodePwd")) else DEFAULT_NT_HASH
+    if unlocked:
+        lm_hash = des_decrypt(lm_pwd, user.rid).hex() if (lm_pwd := user.get("dBCSPwd")) else DEFAULT_LM_HASH
+        nt_hash = des_decrypt(nt_pwd, user.rid).hex() if (nt_pwd := user.get("unicodePwd")) else DEFAULT_NT_HASH
 
-    # Decrypt password history
-    lm_history = [des_decrypt(lm, user.rid).hex() for lm in user.get("lmPwdHistory")]
-    nt_history = [des_decrypt(nt, user.rid).hex() for nt in user.get("ntPwdHistory")]
+        # Decrypt password history
+        lm_history = [des_decrypt(lm, user.rid).hex() for lm in user.get("lmPwdHistory")]
+        nt_history = [des_decrypt(nt, user.rid).hex() for nt in user.get("ntPwdHistory")]
+    else:
+        lm_hash = lm_pwd.hex() if (lm_pwd := user.get("dBCSPwd")) else None
+        nt_hash = nt_pwd.hex() if (nt_pwd := user.get("unicodePwd")) else None
 
+        # Decrypt password history
+        lm_history = [lm.hex() for lm in user.get("lmPwdHistory")]
+        nt_history = [nt.hex() for nt in user.get("ntPwdHistory")]
     try:
         member_of = [group.distinguished_name for group in user.groups()]
     except Exception as e:

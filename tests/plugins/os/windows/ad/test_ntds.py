@@ -4,15 +4,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.target.exceptions import UnsupportedPluginError
+from dissect.target.filesystem import VirtualFilesystem
 from dissect.target.helpers.regutil import VirtualKey, VirtualValue
 from dissect.target.plugins.os.windows.ad.ntds import DEFAULT_NT_HASH
+from dissect.target.target import Target
 from tests._utils import absolute_path
 from tests.plugins.os.windows.credential.test_credhist import md4
 from tests.plugins.os.windows.test_lsa import map_lsa_system_keys
 
 if TYPE_CHECKING:
     from dissect.target.helpers.regutil import VirtualHive
-    from dissect.target.target import Target
 
 
 @pytest.fixture
@@ -42,6 +44,21 @@ def target_win_ntds(target_win: Target, hive_hklm: VirtualHive) -> Target:
     )
 
     return target_win
+
+
+@pytest.fixture
+def target_ntds_direct() -> Target:
+    vfs = VirtualFilesystem()
+    vfs.map_file(
+        "/ntds.dit",
+        absolute_path("_data/plugins/os/windows/ad/ntds/goad/ntds.dit.gz"),
+        compression="gzip",
+    )
+    target = Target.open_direct([vfs.path("/ntds.dit")])
+    # A bit dirty, but open_direct does not support vfs as input.
+    target.filesystems.entries = [vfs]
+    target.apply()
+    return target
 
 
 def test_users(target_win_ntds: Target) -> None:
@@ -75,6 +92,26 @@ def test_users(target_win_ntds: Target) -> None:
         assert cn_to_ntlm_hash_mapping[result.cn] == result.nt
 
 
+def test_users_direct(target_ntds_direct: Target) -> None:
+    """Tests if ``ad.users`` outputs the correct amount of records and their content."""
+    cn_to_ntlm_mapping = {
+        "cersei.lannister": "1300000000000000de8b50bb22b7ca27b8880636c234af08100000008454047a5bafbea7c13fd59c1e7cd145"
+        "99e528b83ef0c641b759ab5aa9c3b35e",
+        "tywin.lannister": "1300000000000000edbbc0846f133c5bb499d8d462655830100000006eb2e0921f7ad679dcb6d973aa"
+        "86c2e75c85149c9ba034cfeffd18884864655b",
+    }
+
+    results = list(target_ntds_direct.ad.users())
+
+    assert len(results) == 33
+
+    for result in results:
+        if result.cn not in cn_to_ntlm_mapping:
+            continue
+
+        assert cn_to_ntlm_mapping[result.cn] == result.nt
+
+
 def test_computers(target_win_ntds: Target) -> None:
     """Tests if ``ad.computers`` outputs the correct amount of records and their content."""
     cn_to_ntlm_hash_mapping = {
@@ -92,8 +129,32 @@ def test_computers(target_win_ntds: Target) -> None:
         assert cn_to_ntlm_hash_mapping[result.cn] == result.nt
 
 
+def test_computers_direct(target_ntds_direct: Target) -> None:
+    """Tests if ``ad.computers`` outputs the correct amount of records and their content in direct mode."""
+    cn_to_ntlm_mapping = {
+        "KINGSLANDING": "13000000000000000394535a86eea18adca8aab20e0496e71000000086d75983dd1facad5050218d6b"
+        "257b36f311bc3ce973e0733a330643a495811d",  # Not decrypted
+    }
+
+    results = list(target_ntds_direct.ad.computers())
+
+    assert len(results) == 3
+
+    for result in results:
+        if result.cn not in cn_to_ntlm_mapping or result.nt == DEFAULT_NT_HASH:
+            continue
+
+        assert cn_to_ntlm_mapping[result.cn] == result.nt
+
+
 def test_group_policies(target_win_ntds: Target) -> None:
     results = list(target_win_ntds.ad.group_policies())
+
+    assert len(results) == 5
+
+
+def test_group_policies_direct(target_ntds_direct: Target) -> None:
+    results = list(target_ntds_direct.ad.group_policies())
 
     assert len(results) == 5
 
@@ -109,3 +170,21 @@ def test_secretsdump(target_win_ntds: Target) -> None:
     )
     assert results[10] == "krbtgt_history0:502:7bd05f9617e7f15e3a6ca037e55f713f:988160b622eb37838dbff2523015e44c:::"
     assert results[-1] == "ESSOS$:des-cbc-md5:f715e30273382546"
+
+
+def test_secretsdump_direct(target_ntds_direct: Target) -> None:
+    """Tests if ``ad.secretsdump`` raise an UnsupportedPluginError in direct mode."""
+    with pytest.raises(UnsupportedPluginError):
+        list(target_ntds_direct.ad.secretsdump())
+
+
+def test_dns_nodes(target_win_ntds: Target) -> None:
+    results = list(target_win_ntds.ad.dns_nodes())
+    #    results.sort(key=lambda x: getattr(x, "creation_time"))
+    #    assert results[0].dns_name == ""
+    assert len(results) == 113
+
+
+def test_dns_nodes_direct(target_ntds_direct: Target) -> None:
+    results = list(target_ntds_direct.ad.dns_nodes())
+    assert len(results) == 113
